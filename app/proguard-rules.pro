@@ -26,6 +26,12 @@
 -keep interface eu.kanade.tachiyomi.** { *; }
 -keep class dalvik.system.** { *; }
 
+# CRITICAL: Keep generic type information for LiveData/ViewModel
+-keep,allowobfuscation,allowshrinking class androidx.lifecycle.LiveData
+-keep,allowobfuscation,allowshrinking interface androidx.lifecycle.GenericLifecycleObserver
+-keep class * extends androidx.lifecycle.ViewModel { *; }
+-keep class * extends androidx.lifecycle.LiveData { *; }
+
 # HARD PROTECTION: Prevent obfuscation of ALL Source structures & signatures
 -keep class eu.kanade.tachiyomi.animesource.** { *; }
 -keep interface eu.kanade.tachiyomi.animesource.** { *; }
@@ -41,7 +47,6 @@
 -keep class okhttp3.** { *; }
 -keep interface okhttp3.** { *; }
 -keepclassmembers class okhttp3.** { *; }
--dontobfuscate class okhttp3.**
 
 -keep class okio.** { *; }
 -keep interface okio.** { *; }
@@ -52,6 +57,21 @@
 -keep class kotlinx.coroutines.** { *; }
 -keep class org.jsoup.** { *; }
 -keep class androidx.datastore.** { *; }
+
+# CRITICAL: Keep TypeReference and generic type info
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keepattributes Signature,Exceptions
+
+# Keep Gson serialization/deserialization
+-keepclassmembers,allowobfuscation class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+
+# Prevent R8 from stripping type arguments from LiveData
+-keepclassmembers class * extends androidx.lifecycle.LiveData {
+    <init>(...);
+}
 
 # Suppress Warnings that block compilation
 -dontwarn okhttp3.**
