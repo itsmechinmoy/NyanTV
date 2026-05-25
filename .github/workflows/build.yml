@@ -72,7 +72,7 @@ jobs:
       - name: Rename APK
         run: |
           cd app/build/outputs/apk/release
-          mv app-${{ matrix.label }}-release.apk NyanTV-Android-${{ matrix.label }}.apk
+          mv app-release.apk NyanTV-Android-${{ matrix.label }}.apk
 
       - name: Calculate Build Stats
         run: |
