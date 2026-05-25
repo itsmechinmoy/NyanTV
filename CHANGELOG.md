@@ -1,5 +1,6 @@
 ### 🆕 Changelog
 ### 🔧 Bug Fixes & Improvements
+- [֍](https://github.com/NyanTV/NyanTV/commit/6e408f3)  add rules to prevent r8 from crashing the app at launch
 - [֍](https://github.com/NyanTV/NyanTV/commit/20b2ec1)  adjust apk renaming step for build
 
 
