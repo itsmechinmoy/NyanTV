@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.nyantv.AniZipEpisodeMeta
+import com.nyantv.AniZipService
 import com.nyantv.AniskipService
 import com.nyantv.EpisodeSkipTimes
 import com.nyantv.IntroDbService
@@ -54,6 +56,7 @@ data class PlayerTabUiState(
     val selectedEpisode: SEpisode? = null,
     val streamState: StreamState = StreamState.Idle,
     val skipTimes: EpisodeSkipTimes? = null,
+    val episodeMeta: Map<String, AniZipEpisodeMeta> = emptyMap(),
 )
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
@@ -97,6 +100,8 @@ class PlayerTabViewModel(
     val fillerEpisodes: StateFlow<Set<Int>> = _fillerEpisodes
 
     private var searchJob: Job? = null
+    private var episodeMetaJob: Job? = null
+    private var episodeMetaMalId: String? = null
 
     init {
         refreshWatchProgress()
@@ -168,6 +173,9 @@ class PlayerTabViewModel(
                 _fillerEpisodes.value = JikanService.getFillerEpisodes(malId)
             }
         }
+        if (malId != null) {
+            loadEpisodeMetadata(malId)
+        }
     }
 
     // ── Source building ───────────────────────────────────────────────────────
@@ -202,10 +210,22 @@ class PlayerTabViewModel(
             _fillerEpisodes.value = JikanService.getFillerEpisodes(id)
             state.value.selectedEpisode?.let { loadSkipTimes(it.episode_number) }
         }
+        loadEpisodeMetadata(id)
     }
 
     fun setImdbId(id: String) {
         imdbId = id
+    }
+
+    private fun loadEpisodeMetadata(malId: String) {
+        if (episodeMetaMalId == malId && _state.value.episodeMeta.isNotEmpty()) return
+        episodeMetaMalId = malId
+        episodeMetaJob?.cancel()
+        _state.update { it.copy(episodeMeta = emptyMap()) }
+        episodeMetaJob = viewModelScope.launch {
+            val result = AniZipService.getEpisodes(malId)
+            _state.update { it.copy(episodeMeta = result) }
+        }
     }
 
     fun loadSkipTimes(episodeNumber: Float) {
