@@ -84,6 +84,7 @@ fun MainNavigation(vm: AppViewModel = viewModel()) {
     val backEntry     by navController.currentBackStackEntryAsState()
     val currentRoute   = backEntry?.destination?.route
     val serviceType   by vm.serviceType.collectAsStateWithLifecycle()
+    val showAnilistApiDownPrompt by vm.anilistApiDownPrompt.collectAsStateWithLifecycle()
 
     val detailHistory   = remember { mutableStateListOf<String>() }
     val sidebarFocusReq = remember { FocusRequester() }
@@ -186,6 +187,31 @@ fun MainNavigation(vm: AppViewModel = viewModel()) {
                     )
                 }
             }
+        }
+
+        if (showAnilistApiDownPrompt && serviceType == ServiceType.ANILIST) {
+            AlertDialog(
+                onDismissRequest = { vm.dismissAnilistApiDownPrompt() },
+                title = { Text("AniList API is down") },
+                text = {
+                    Text(
+                        "AniList is having trouble right now. Switch to MyAnimeList for the time being — you can keep your progress in sync once AniList is back."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        vm.dismissAnilistApiDownPrompt()
+                        vm.switchService(ServiceType.MAL)
+                    }) {
+                        Text("Use MyAnimeList")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { vm.dismissAnilistApiDownPrompt() }) {
+                        Text("Stay on AniList")
+                    }
+                }
+            )
         }
     }
 }

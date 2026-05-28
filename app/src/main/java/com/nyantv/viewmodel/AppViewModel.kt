@@ -111,6 +111,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _trendingMovies = MutableStateFlow<List<Media>>(emptyList())
     private val _trendingShows  = MutableStateFlow<List<Media>>(emptyList())
+    private val _anilistApiDownPrompt = MutableStateFlow(false)
 
     val isLoggedIn:      StateFlow<Boolean>            = _isLoggedIn.asStateFlow()
     val profile:         StateFlow<Profile?>           = _profile.asStateFlow()
@@ -124,6 +125,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val networkState:    StateFlow<NetworkState>       = _networkState.asStateFlow()
     val trendingMovies: StateFlow<List<Media>> = _trendingMovies.asStateFlow()
     val trendingShows:  StateFlow<List<Media>> = _trendingShows.asStateFlow()
+    val anilistApiDownPrompt: StateFlow<Boolean> = _anilistApiDownPrompt.asStateFlow()
 
     init {
         bindService()
@@ -262,7 +264,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (attempt < 2) delay(2_000L * (attempt + 1))
         }
 
+        if (_serviceType.value == ServiceType.ANILIST) {
+            _anilistApiDownPrompt.value = true
+        }
         _networkState.value = NetworkState.ERROR
+    }
+
+    fun dismissAnilistApiDownPrompt() {
+        _anilistApiDownPrompt.value = false
     }
 
     fun retryLoad() = viewModelScope.launch {
