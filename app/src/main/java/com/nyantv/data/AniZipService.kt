@@ -25,22 +25,14 @@ object AniZipService {
 
     private const val TAG = "AniZipService"
     private const val EPISODES_URL = "https://api.ani.zip/v1/episodes"
-    private const val MAPPINGS_URL = "https://api.ani.zip/v1/mappings"
-
     private val client = OkHttpClient()
     private val json   = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
     suspend fun getEpisodesByAnilistId(anilistId: String): Map<String, AniZipEpisodeMeta> =
         fetchEpisodes("$EPISODES_URL?anilist_id=$anilistId")
 
-    suspend fun getEpisodesByMalId(malId: String): Map<String, AniZipEpisodeMeta> {
-        val mappingRoot = fetchJson("$MAPPINGS_URL?mal_id=$malId") ?: return emptyMap()
-        val mappedEpisodes = parseEpisodes(mappingRoot)
-        if (mappedEpisodes.isNotEmpty()) return mappedEpisodes
-
-        val anilistId = mappingRoot.findAnilistId() ?: return emptyMap()
-        return fetchEpisodes("$EPISODES_URL?anilist_id=$anilistId")
-    }
+    suspend fun getEpisodesByMalId(malId: String): Map<String, AniZipEpisodeMeta> =
+        fetchEpisodes("$EPISODES_URL?mal_id=$malId")
 
     suspend fun getEpisodes(malId: String): Map<String, AniZipEpisodeMeta> = getEpisodesByMalId(malId)
 
@@ -167,24 +159,4 @@ object AniZipService {
         return keys
     }
 
-    private fun JsonElement.findAnilistId(): String? = when (this) {
-        is JsonObject -> {
-            listOf("anilist_id", "anilistId").firstNotNullOfOrNull { key ->
-                this[key].stringOrNull()
-            } ?: this["anilist"].extractAnilistId()
-            ?: listOf("mappings", "mapping", "data").firstNotNullOfOrNull { key ->
-                this[key]?.findAnilistId()
-            }
-        }
-        is kotlinx.serialization.json.JsonArray -> this.firstNotNullOfOrNull { it.findAnilistId() }
-        else -> null
-    }
-
-    private fun JsonElement?.extractAnilistId(): String? = when (this) {
-        is JsonPrimitive -> this.stringOrNull()
-        is JsonObject -> this["id"].stringOrNull()
-            ?: this["anilist_id"].stringOrNull()
-            ?: this["anilistId"].stringOrNull()
-        else -> null
-    }
 }
