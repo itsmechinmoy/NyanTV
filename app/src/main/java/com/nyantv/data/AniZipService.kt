@@ -24,63 +24,25 @@ data class AniZipEpisodeMeta(
 object AniZipService {
 
     private const val TAG = "AniZipService"
-    private const val API_URL = "https://api.ani.zip/v1/episodes"
+    private const val EPISODES_URL = "https://api.ani.zip/v1/episodes"
+    private const val MAPPINGS_URL = "https://api.ani.zip/v1/mappings"
 
     private val client = OkHttpClient()
     private val json   = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
-    suspend fun getEpisodes(malId: String): Map<String, AniZipEpisodeMeta> = withContext(Dispatchers.IO) {
-        val url = "$API_URL?mal_id=$malId"
-        try {
-            val response = client.newCall(Request.Builder().url(url).build()).execute()
-            if (response.code != 200) return@withContext emptyMap()
+    suspend fun getEpisodesByAnilistId(anilistId: String): Map<String, AniZipEpisodeMeta> =
+        fetchEpisodes("$EPISODES_URL?anilist_id=$anilistId")
 
-            val body = response.body?.string().orEmpty()
-            if (body.isBlank()) return@withContext emptyMap()
+    suspend fun getEpisodesByMalId(malId: String): Map<String, AniZipEpisodeMeta> {
+        val mappingRoot = fetchJson("$MAPPINGS_URL?mal_id=$malId") ?: return emptyMap()
+        val mappedEpisodes = parseEpisodes(mappingRoot)
+        if (mappedEpisodes.isNotEmpty()) return mappedEpisodes
 
-            val root = json.parseToJsonElement(body)
-            val episodes = root.extractEpisodeObjects()
-            if (episodes.isEmpty()) return@withContext emptyMap()
-
-            val result = mutableMapOf<String, AniZipEpisodeMeta>()
-
-            for (payload in episodes) {
-                val obj = payload.obj
-                val episodeRaw = obj.string("episode")
-                    ?: payload.key
-                    ?: obj.string("ep")
-                    ?: obj.string("number")
-                val keys = episodeKeys(episodeRaw)
-                if (keys.isEmpty()) continue
-
-                val meta = AniZipEpisodeMeta(
-                    title    = extractTitle(obj["title"] ?: obj["titles"]),
-                    summary  = obj.string("summary") ?: obj.string("synopsis"),
-                    overview = obj.string("overview") ?: obj.string("description"),
-                    image    = obj.string("image") ?: obj.string("thumbnail") ?: obj.string("thumb"),
-                    rating   = obj.string("rating"),
-                    airDate  = obj.string("airdate") ?: obj.string("airDate") ?: obj.string("air_date"),
-                )
-
-                if (meta.title == null &&
-                    meta.summary == null &&
-                    meta.overview == null &&
-                    meta.image == null &&
-                    meta.rating == null &&
-                    meta.airDate == null
-                ) {
-                    continue
-                }
-
-                keys.forEach { key -> result[key] = meta }
-            }
-
-            result
-        } catch (e: Exception) {
-            Log.e(TAG, "getEpisodes failed", e)
-            emptyMap()
-        }
+        val anilistId = mappingRoot.findAnilistId() ?: return emptyMap()
+        return fetchEpisodes("$EPISODES_URL?anilist_id=$anilistId")
     }
+
+    suspend fun getEpisodes(malId: String): Map<String, AniZipEpisodeMeta> = getEpisodesByMalId(malId)
 
     private data class EpisodePayload(val key: String?, val obj: JsonObject)
 
@@ -106,6 +68,66 @@ object AniZipService {
             is JsonObject -> extractFromObject(data)
             is kotlinx.serialization.json.JsonArray -> data.mapNotNull { it.asObject()?.let { ep -> EpisodePayload(null, ep) } }
             else -> emptyList()
+        }
+    }
+
+    private suspend fun fetchEpisodes(url: String): Map<String, AniZipEpisodeMeta> {
+        val root = fetchJson(url) ?: return emptyMap()
+        return parseEpisodes(root)
+    }
+
+    private fun parseEpisodes(root: JsonElement): Map<String, AniZipEpisodeMeta> {
+        val episodes = root.extractEpisodeObjects()
+        if (episodes.isEmpty()) return emptyMap()
+
+        val result = mutableMapOf<String, AniZipEpisodeMeta>()
+
+        for (payload in episodes) {
+            val obj = payload.obj
+            val episodeRaw = obj.string("episode")
+                ?: payload.key
+                ?: obj.string("ep")
+                ?: obj.string("number")
+            val keys = episodeKeys(episodeRaw)
+            if (keys.isEmpty()) continue
+
+            val meta = AniZipEpisodeMeta(
+                title    = extractTitle(obj["title"] ?: obj["titles"]),
+                summary  = obj.string("summary") ?: obj.string("synopsis"),
+                overview = obj.string("overview") ?: obj.string("description"),
+                image    = obj.string("image") ?: obj.string("thumbnail") ?: obj.string("thumb"),
+                rating   = obj.string("rating"),
+                airDate  = obj.string("airdate") ?: obj.string("airDate") ?: obj.string("air_date"),
+            )
+
+            if (meta.title == null &&
+                meta.summary == null &&
+                meta.overview == null &&
+                meta.image == null &&
+                meta.rating == null &&
+                meta.airDate == null
+            ) {
+                continue
+            }
+
+            keys.forEach { key -> result[key] = meta }
+        }
+
+        return result
+    }
+
+    private suspend fun fetchJson(url: String): JsonElement? = withContext(Dispatchers.IO) {
+        try {
+            val response = client.newCall(Request.Builder().url(url).build()).execute()
+            if (response.code != 200) return@withContext null
+
+            val body = response.body?.string().orEmpty()
+            if (body.isBlank()) return@withContext null
+
+            json.parseToJsonElement(body)
+        } catch (e: Exception) {
+            Log.e(TAG, "AniZip request failed", e)
+            null
         }
     }
 
@@ -143,5 +165,26 @@ object AniZipService {
             keys.add(numeric.toString())
         }
         return keys
+    }
+
+    private fun JsonElement.findAnilistId(): String? = when (this) {
+        is JsonObject -> {
+            listOf("anilist_id", "anilistId").firstNotNullOfOrNull { key ->
+                this[key].stringOrNull()
+            } ?: this["anilist"].extractAnilistId()
+            ?: listOf("mappings", "mapping", "data").firstNotNullOfOrNull { key ->
+                this[key]?.findAnilistId()
+            }
+        }
+        is kotlinx.serialization.json.JsonArray -> this.firstNotNullOfOrNull { it.findAnilistId() }
+        else -> null
+    }
+
+    private fun JsonElement?.extractAnilistId(): String? = when (this) {
+        is JsonPrimitive -> this.stringOrNull()
+        is JsonObject -> this["id"].stringOrNull()
+            ?: this["anilist_id"].stringOrNull()
+            ?: this["anilistId"].stringOrNull()
+        else -> null
     }
 }
