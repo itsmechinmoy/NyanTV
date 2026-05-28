@@ -20,6 +20,7 @@ fun NetworkStatusContent(
     state: NetworkState,
     serviceName: String,
     onRetry: () -> Unit,
+    errorMessage: String? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
@@ -48,7 +49,7 @@ fun NetworkStatusContent(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "Check your connection",
+                    text = errorMessage ?: "Check your connection",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center
