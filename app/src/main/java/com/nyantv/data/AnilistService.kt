@@ -1,6 +1,7 @@
 package com.nyantv.data
 
 import android.content.Context
+import android.util.Base64
 import androidx.browser.customtabs.CustomTabsIntent
 import com.nyantv.BuildConfig
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +16,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 import androidx.core.net.toUri
 import androidx.core.content.edit
+import org.json.JSONObject
 
 private const val GQL_URL = "https://graphql.anilist.co"
 private const val PREFS    = "anilist_prefs"
@@ -104,6 +106,7 @@ class AnilistService(context: Context) : MediaService {
 
     override suspend fun autoLogin() {
         if (token != null) {
+            getTokenExpiryDays()?.let { if (it < 0) { logout(); return } }
             _isLoggedIn.value = true
             withContext(Dispatchers.IO) {
                 runCatching {
@@ -113,6 +116,31 @@ class AnilistService(context: Context) : MediaService {
                     android.util.Log.e("AnilistService", "autoLogin failed", it)
                 }
             }
+        }
+    }
+
+    /**
+     * Decodes the JWT token and returns the number of days until expiry.
+     * Returns null if the token is missing or cannot be decoded.
+     * Returns a negative number if the token is already expired.
+     */
+    fun getTokenExpiryDays(): Long? {
+        val t = token ?: return null
+        return try {
+            val parts = t.split(".")
+            if (parts.size != 3) return null
+            val payload = Base64.decode(
+                parts[1].replace('-', '+').replace('_', '/'),
+                Base64.NO_PADDING or Base64.URL_SAFE
+            )
+            val json = JSONObject(String(payload))
+            if (!json.has("exp")) return null
+            val expSeconds = json.getLong("exp")
+            val nowSeconds = System.currentTimeMillis() / 1000
+            (expSeconds - nowSeconds) / 86400
+        } catch (e: Exception) {
+            android.util.Log.e("AnilistService", "getTokenExpiryDays error", e)
+            null
         }
     }
 
@@ -247,7 +275,23 @@ class AnilistService(context: Context) : MediaService {
             .header("Accept", "application/json")
             .build()
         val resp = http.newCall(req).execute()
-        json.parseToJsonElement(resp.body.string()).jsonObject
+        val bodyText = resp.body?.string().orEmpty()
+        if (!bodyText.trimStart().startsWith("{")) {
+            throw Exception("AniList is down (error: ${resp.code})")
+        }
+
+        val result = json.parseToJsonElement(bodyText).jsonObject
+        val errors = result["errors"]?.jsonArray
+        if (!resp.isSuccessful || resp.code == 400 || resp.code == 403 || !errors.isNullOrEmpty()) {
+            val message = errors?.firstOrNull()
+                ?.jsonObject
+                ?.get("message")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?: "AniList error (error: ${resp.code})"
+            throw Exception(message)
+        }
+        result
     }
 
     // ── Queries ────────────────────────────────────────────────────────────────

@@ -112,6 +112,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _trendingMovies = MutableStateFlow<List<Media>>(emptyList())
     private val _trendingShows  = MutableStateFlow<List<Media>>(emptyList())
     private val _anilistApiDownPrompt = MutableStateFlow(false)
+    private val _anilistApiErrorMessage = MutableStateFlow<String?>(null)
 
     val isLoggedIn:      StateFlow<Boolean>            = _isLoggedIn.asStateFlow()
     val profile:         StateFlow<Profile?>           = _profile.asStateFlow()
@@ -126,6 +127,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val trendingMovies: StateFlow<List<Media>> = _trendingMovies.asStateFlow()
     val trendingShows:  StateFlow<List<Media>> = _trendingShows.asStateFlow()
     val anilistApiDownPrompt: StateFlow<Boolean> = _anilistApiDownPrompt.asStateFlow()
+    val anilistApiErrorMessage: StateFlow<String?> = _anilistApiErrorMessage.asStateFlow()
 
     init {
         bindService()
@@ -158,6 +160,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _recentlyUpdated.value = emptyList()
         _trendingMovies.value  = emptyList()
         _trendingShows.value   = emptyList()
+        _anilistApiDownPrompt.value = false
+        _anilistApiErrorMessage.value = null
 
         _service     = buildService(type, getApplication())
         sideService  = buildSideService(type, getApplication())
@@ -253,18 +257,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadHome() = viewModelScope.launch {
         _networkState.value = NetworkState.LOADING
+        _anilistApiErrorMessage.value = null
 
+        var lastError: Throwable? = null
         repeat(3) { attempt ->
             val result = runCatching { _service.fetchHomePage() }
             if (result.isSuccess) {
                 _networkState.value = NetworkState.SUCCESS
+                _anilistApiDownPrompt.value = false
                 return@launch
             }
-            android.util.Log.e("AppViewModel", "loadHome attempt $attempt failed", result.exceptionOrNull())
+            lastError = result.exceptionOrNull()
+            android.util.Log.e("AppViewModel", "loadHome attempt $attempt failed", lastError)
             if (attempt < 2) delay(2_000L * (attempt + 1))
         }
 
         if (_serviceType.value == ServiceType.ANILIST) {
+            _anilistApiErrorMessage.value = lastError?.message ?: "AniList API is not responding"
             _anilistApiDownPrompt.value = true
         }
         _networkState.value = NetworkState.ERROR
@@ -275,6 +284,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun retryLoad() = viewModelScope.launch {
+        _anilistApiErrorMessage.value = null
         runCatching { _service.autoLogin() }
             .onFailure { android.util.Log.e("AppViewModel", "autoLogin failed on retry", it) }
 
