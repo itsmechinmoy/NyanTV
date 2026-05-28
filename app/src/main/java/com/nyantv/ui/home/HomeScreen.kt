@@ -20,11 +20,13 @@ fun HomeScreen(vm: AppViewModel, navController: NavController, onDetailClick: (S
     val profile      by vm.profile.collectAsStateWithLifecycle()
     val networkState by vm.networkState.collectAsStateWithLifecycle()
     val serviceType  by vm.serviceType.collectAsStateWithLifecycle()
+    val apiErrorMessage by vm.anilistApiErrorMessage.collectAsStateWithLifecycle()
 
     NetworkStatusContent(
         state       = networkState,
         serviceName = serviceType.name.lowercase().replaceFirstChar { it.uppercase() },
-        onRetry     = { vm.retryLoad() }
+        onRetry     = { vm.retryLoad() },
+        errorMessage = apiErrorMessage
     ) {
         Column(
             modifier = Modifier
