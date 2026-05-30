@@ -309,7 +309,7 @@ fun PlayerSettingsScreen(navController: NavController) {
 
             // Auto-translate dropdown
             var translateExpanded by remember { mutableStateOf(false) }
-            val translateOptions = listOf(null, "en", "de", "fr", "es", "ja", "ko", "zh")
+            val translateOptions = listOfval translateOptions = listOf(null, "en", "de", "fr", "es", "ja", "ko", "zh", "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "gom", "mai", "ml", "mni-Mtei", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur", "it", "pt", "ru", "pl", "nl", "uk", "sv", "ht", "qu", "vi", "th", "id", "ms", "tl", "my", "km", "ar", "fa", "tr", "uz", "kk", "az", "sw", "am", "yo", "ig", "ha", "zu", "so", "mg")
 
             Row(
                 modifier = Modifier
