@@ -11,7 +11,7 @@ import java.net.URLEncoder
  * Lightweight Lingva Translate client.
  *
  * Lingva is an open-source front-end for Google Translate with no API key required.
- * Public instances: https://lingva.ml  (default)
+ * Tries each instance in order, falling back to the next if one fails.
  *
  * API: GET /api/v1/{source}/{target}/{encoded_text}
  * Response: { "translation": "..." }
@@ -20,7 +20,10 @@ import java.net.URLEncoder
  * (e.g. OP/ED lyrics that repeat) don't make duplicate requests.
  */
 class LingvaTranslator(
-    private val baseUrl: String = "https://lingva.ml",
+    private val baseUrls: List<String> = listOf(
+        "https://lingva.garudalinux.org",
+        "https://lingva.ml"
+    ),
     private val sourceLang: String = "auto",
     val targetLang: String
 ) {
@@ -30,14 +33,19 @@ class LingvaTranslator(
     suspend fun translate(text: String): String {
         if (text.isBlank()) return text
         cache.get(text)?.let { return it }
-
         return withContext(Dispatchers.IO) {
-            runCatching {
-                val encoded  = URLEncoder.encode(text, "UTF-8")
-                val endpoint = "$baseUrl/api/v1/$sourceLang/$targetLang/$encoded"
-                val json     = URL(endpoint).readText(Charsets.UTF_8)
-                JSONObject(json).getString("translation")
-            }.getOrDefault(text) // on failure, return original
+            val encoded = URLEncoder.encode(text, "UTF-8")
+            var result = text
+            for (base in baseUrls) {
+                result = runCatching {
+                    val json = URL("$base/api/v1/$sourceLang/$targetLang/$encoded").readText(Charsets.UTF_8)
+                    val obj = JSONObject(json)
+                    if (obj.has("error")) error("Instance failed: $base")
+                    obj.getString("translation")
+                }.getOrNull() ?: continue
+                break
+            }
+            result
         }.also { result ->
             cache.put(text, result)
         }
